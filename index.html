@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>🎡 幸运转盘 - 学习积分抽奖</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .wheel-container {
+      position: relative;
+      width: 280px;
+      height: 280px;
+    }
+    .wheel-glow {
+      position: absolute;
+      inset: -12px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #facc15, #ec4899, #a855f7);
+      filter: blur(8px);
+      opacity: 0.8;
+    }
+    .wheel-border {
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #facc15, #ec4899, #a855f7);
+    }
+    #wheel {
+      position: relative;
+      border-radius: 50%;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+    .spin-btn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, #ef4444, #ec4899);
+      color: white;
+      font-weight: bold;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      transition: all 0.2s;
+      z-index: 10;
+    }
+    .spin-btn:hover:not(:disabled) {
+      transform: translate(-50%, -50%) scale(1.1);
+    }
+    .spin-btn:active:not(:disabled) {
+      transform: translate(-50%, -50%) scale(0.95);
+    }
+    .spin-btn:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+    .pointer {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 12px solid transparent;
+      border-right: 12px solid transparent;
+      border-top: 20px solid #ef4444;
+      filter: drop-shadow(0 2px 2px rgba(0,0,0,0.2));
+      z-index: 5;
+    }
+    .confetti {
+      position: fixed;
+      width: 10px;
+      height: 14px;
+      top: -20px;
+      animation: fall linear forwards;
+      z-index: 100;
+    }
+    @keyframes fall {
+      to {
+        transform: translateY(120vh) rotate(720deg);
+        opacity: 0;
+      }
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal.show {
+      display: flex;
+    }
+    .modal-content {
+      background: white;
+      border-radius: 24px;
+      padding: 24px;
+      text-align: center;
+      max-width: 320px;
+      width: 90%;
+      animation: pop 0.3s ease-out;
+    }
+    @keyframes pop {
+      0% { transform: scale(0.8); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-pink-100 via-purple-100 to-blue-100">
+  <!-- 顶部状态栏 -->
+  <header class="bg-white/80 backdrop-blur-sm shadow-sm px-4 py-3 sticky top-0 z-40">
+    <div class="flex items-center justify-between max-w-md mx-auto">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">🎡</span>
+        <h1 class="text-lg font-bold bg-gradient-to-r from-pink-500 to-purple-600 bg-clip-text text-transparent">幸运转盘</h1>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-1 bg-amber-100 px-3 py-1.5 rounded-full">
+          <span>💰</span>
+          <span id="points" class="font-bold text-amber-700">0</span>
+        </div>
+        <div class="flex items-center gap-1 bg-green-100 px-3 py-1.5 rounded-full">
+          <span>🎰</span>
+          <span id="chances" class="font-bold text-green-700">3</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主内容 -->
+  <main class="flex-1 flex flex-col items-center justify-center px-4 py-8">
+    <div id="no-chance-msg" class="mb-4 bg-amber-100 text-amber-700 px-4 py-2 rounded-full text-sm hidden">
+      😅 抽奖次数用完了，点击下方"增加机会"
+    </div>
+
+    <!-- 转盘 -->
+    <div class="wheel-container">
+      <div class="wheel-glow"></div>
+      <div class="wheel-border"></div>
+      <canvas id="wheel" width="280" height="280"></canvas>
+      <div class="pointer"></div>
+      <button id="spinBtn" class="spin-btn">抽奖</button>
+    </div>
+
+    <!-- 概率说明 -->
+    <div id="prize-info" class="mt-5 grid grid-cols-4 gap-2 w-full max-w-xs"></div>
+
+    <!-- 提示 -->
+    <div class="mt-6 text-center text-gray-500 text-sm">
+      <p>🌟 每天完成学习任务获得抽奖机会</p>
+      <p>🎯 积分可以在商城兑换奖励</p>
+    </div>
+
+    <!-- 商城按钮 -->
+    <button id="shopBtn" class="mt-6 bg-gradient-to-r from-amber-400 to-orange-500 text-white font-bold py-3 px-8 rounded-full shadow-lg hover:scale-105 transition-transform">
+      🎁 打开商城
+    </button>
+
+    <!-- 管理按钮 -->
+    <button id="addChanceBtn" class="mt-3 text-gray-500 text-sm hover:text-gray-700">
+      ➕ 增加抽奖机会
+    </button>
+  </main>
+
+  <!-- 中奖弹窗 -->
+  <div id="prizeModal" class="modal">
+    <div class="modal-content">
+      <div class="text-5xl mb-4" id="prizeEmoji">🎉</div>
+      <h2 class="text-2xl font-bold text-gray-800 mb-2">🎊 恭喜中奖！🎊</h2>
+      <div id="prizeName" class="text-xl font-bold text-purple-600 mb-2">大奖励</div>
+      <div id="prizePoints" class="text-3xl font-extrabold text-gray-800 mb-4">+6 积分</div>
+      <p class="text-gray-500 text-sm mb-4">继续努力，每天学习，收获更多积分！</p>
+      <button id="closeModal" class="w-full py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold rounded-xl">
+        太棒了！✨
+      </button>
+    </div>
+  </div>
+
+  <!-- 商城弹窗 -->
+  <div id="shopModal" class="modal">
+    <div class="modal-content" style="max-width: 360px; max-height: 80vh; overflow-y: auto;">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold">🎁 积分商城</h2>
+        <button id="closeShop" class="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+      </div>
+      <div class="bg-gradient-to-r from-amber-400 to-orange-500 text-white p-3 rounded-xl mb-4">
+        <div class="text-sm opacity-90">当前积分</div>
+        <div id="shopPoints" class="text-3xl font-bold">0</div>
+      </div>
+      <div id="shopList" class="space-y-2"></div>
+    </div>
+  </div>
+
+  <script>
+    // 奖品配置
+    const prizes = [
+      { id: 'small', name: '小奖励', points: 2, probability: 0.4, color: '#FF9500', emoji: '🎯' },
+      { id: 'medium', name: '中奖励', points: 4, probability: 0.3, color: '#34C759', emoji: '🌟' },
+      { id: 'large', name: '大奖励', points: 6, probability: 0.2, color: '#AF52DE', emoji: '🎉' },
+      { id: 'lucky', name: '幸运大奖', points: 8, probability: 0.1, color: '#FF3B30', emoji: '💎' }
+    ];
+
+    // 商城物品
+    const shopItems = [
+      // 青铜档
+      { name: '抽抽乐一次', points: 5, tier: '🥉' },
+      { name: '玩15分钟玩具', points: 8, tier: '🥉' },
+      { name: '指定父母一方帮自己收拾书房', points: 10, tier: '🥉' },
+      { name: '看20分钟动画片', points: 12, tier: '🥉' },
+      { name: '玩20分钟游戏/平板', points: 15, tier: '🥉' },
+      { name: '玩一局桌游（三国杀等）', points: 18, tier: '🥉' },
+      { name: '获得一本漫画书/故事书', points: 20, tier: '🥉' },
+      // 白银档
+      { name: '吃一次汉堡', points: 25, tier: '🥈' },
+      { name: '让父母两人收拾书房和游乐区', points: 30, tier: '🥈' },
+      { name: '玩40分钟游戏/平板', points: 35, tier: '🥈' },
+      { name: '选择一部电影周末在家看', points: 40, tier: '🥈' },
+      { name: '去一次儿童乐园（嗨享小镇）', points: 45, tier: '🥈' },
+      { name: '周末玩60分钟游戏', points: 50, tier: '🥈' },
+      // 黄金档
+      { name: '选择一次外出就餐餐厅', points: 55, tier: '🥇' },
+      { name: '获得一个中等玩具（50元以内）', points: 60, tier: '🥇' },
+      { name: '去1次游乐场/电玩城（70币）', points: 70, tier: '🥇' },
+      { name: '看一场川剧变脸表演', points: 75, tier: '🥇' },
+      { name: '买一个喜欢的蛋糕庆祝', points: 80, tier: '🥇' },
+      { name: '周末出游地点由孩子决定', points: 85, tier: '🥇' },
+      { name: '去电影院看一场电影', points: 100, tier: '🥇' },
+      // 钻石档
+      { name: '获得一个大玩具（100元以内）', points: 120, tier: '💎' },
+      { name: '去泡一次温泉', points: 150, tier: '💎' },
+      { name: '成都周边一日游', points: 200, tier: '💎' },
+      { name: '成都周边二日游，住一晚', points: 300, tier: '💎' }
+    ];
+
+    // 状态
+    let points = parseInt(localStorage.getItem('points') || '0');
+    let chances = parseInt(localStorage.getItem('chances') || '3');
+    let isSpinning = false;
+
+    // DOM元素
+    const canvas = document.getElementById('wheel');
+    const ctx = canvas.getContext('2d');
+    const spinBtn = document.getElementById('spinBtn');
+    const pointsEl = document.getElementById('points');
+    const chancesEl = document.getElementById('chances');
+    const noChanceMsg = document.getElementById('no-chance-msg');
+    const prizeInfoEl = document.getElementById('prize-info');
+    const prizeModal = document.getElementById('prizeModal');
+    const shopModal = document.getElementById('shopModal');
+
+    // 更新显示
+    function updateDisplay() {
+      pointsEl.textContent = points;
+      chancesEl.textContent = chances;
+      document.getElementById('shopPoints').textContent = points;
+      noChanceMsg.classList.toggle('hidden', chances > 0);
+      spinBtn.disabled = chances <= 0;
+      spinBtn.textContent = chances <= 0 ? '无机会' : '抽奖';
+      localStorage.setItem('points', points);
+      localStorage.setItem('chances', chances);
+    }
+
+    // 绘制转盘
+    let currentRotation = 0;
+    function drawWheel(rotation = 0) {
+      const size = canvas.width;
+      const centerX = size / 2;
+      const centerY = size / 2;
+      const radius = size / 2 - 10;
+
+      ctx.clearRect(0, 0, size, size);
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate(rotation * Math.PI / 180);
+      ctx.translate(-centerX, -centerY);
+
+      let startAngle = -Math.PI / 2;
+
+      prizes.forEach(prize => {
+        const sliceAngle = prize.probability * 2 * Math.PI;
+        const endAngle = startAngle + sliceAngle;
+
+        // 扇区
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fillStyle = prize.color;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // 文字
+        const textAngle = startAngle + sliceAngle / 2;
+        const textX = centerX + Math.cos(textAngle) * (radius * 0.65);
+        const textY = centerY + Math.sin(textAngle) * (radius * 0.65);
+
+        ctx.save();
+        ctx.translate(textX, textY);
+        ctx.rotate(textAngle + Math.PI / 2);
+
+        ctx.font = '22px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(prize.emoji, 0, -10);
+
+        ctx.font = 'bold 14px Arial';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(prize.points + '分', 0, 14);
+
+        ctx.restore();
+        startAngle = endAngle;
+      });
+
+      ctx.restore();
+
+      // 中心圆
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 32, 0, 2 * Math.PI);
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+      ctx.strokeStyle = '#e5e7eb';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    // 初始化概率显示
+    function initPrizeInfo() {
+      prizeInfoEl.innerHTML = prizes.map(p => `
+        <div class="flex flex-col items-center p-2 rounded-lg bg-white/80 shadow">
+          <span class="text-lg">${p.emoji}</span>
+          <span class="text-xs font-medium text-gray-700">${p.points}分</span>
+          <span class="text-xs text-gray-500">${Math.round(p.probability * 100)}%</span>
+        </div>
+      `).join('');
+    }
+
+    // 初始化商城
+    function initShop() {
+      const shopList = document.getElementById('shopList');
+      shopList.innerHTML = shopItems.map(item => {
+        const canAfford = points >= item.points;
+        return `
+          <button 
+            onclick="exchange('${item.name}', ${item.points})"
+            class="w-full p-3 rounded-xl flex items-center justify-between transition-all ${
+              canAfford 
+                ? 'bg-white shadow hover:shadow-md hover:scale-[1.02] active:scale-[0.98]' 
+                : 'bg-gray-100 opacity-60'
+            }"
+            ${!canAfford ? 'disabled' : ''}
+          >
+            <div class="flex items-center gap-2">
+              <span>${item.tier}</span>
+              <span class="text-sm ${canAfford ? 'text-gray-800' : 'text-gray-500'}">${item.name}</span>
+            </div>
+            <span class="px-3 py-1 rounded-full text-sm font-bold ${
+              canAfford ? 'bg-amber-100 text-amber-700' : 'bg-gray-200 text-gray-500'
+            }">${item.points}分</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    // 兑换
+    function exchange(name, cost) {
+      if (points < cost) return;
+      points -= cost;
+      updateDisplay();
+      initShop();
+      alert(`🎉 兑换成功！\n\n${name}\n\n找爸爸妈妈兑现奖励吧！`);
+    }
+
+    // 开始抽奖
+    function spin() {
+      if (isSpinning || chances <= 0) return;
+      isSpinning = true;
+      spinBtn.disabled = true;
+      spinBtn.textContent = '旋转中';
+
+      // 选择奖品
+      const random = Math.random();
+      let cumulative = 0;
+      let selectedPrize = prizes[0];
+      for (const prize of prizes) {
+        cumulative += prize.probability;
+        if (random <= cumulative) {
+          selectedPrize = prize;
+          break;
+        }
+      }
+
+      // 计算角度
+      let targetAngle = 0;
+      for (const p of prizes) {
+        if (p.id === selectedPrize.id) break;
+        targetAngle += p.probability * 360;
+      }
+      targetAngle += Math.random() * selectedPrize.probability * 360 * 0.8 + selectedPrize.probability * 360 * 0.1;
+
+      const extraSpins = 5 + Math.floor(Math.random() * 3);
+      const targetRotation = extraSpins * 360 + (360 - targetAngle);
+      const duration = 4000;
+      const startTime = Date.now();
+      const startRotation = currentRotation;
+
+      function animate() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easeOut = 1 - Math.pow(1 - progress, 4);
+        currentRotation = startRotation + targetRotation * easeOut;
+        drawWheel(currentRotation);
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          isSpinning = false;
+          chances--;
+          points += selectedPrize.points;
+          updateDisplay();
+          initShop();
+          showPrize(selectedPrize);
+        }
+      }
+      requestAnimationFrame(animate);
+    }
+
+    // 显示奖品
+    function showPrize(prize) {
+      document.getElementById('prizeEmoji').textContent = prize.emoji;
+      document.getElementById('prizeName').textContent = prize.name;
+      document.getElementById('prizePoints').textContent = '+' + prize.points + ' 积分';
+      document.getElementById('prizeModal').classList.add('show');
+      createConfetti();
+    }
+
+    // 彩带效果
+    function createConfetti() {
+      const colors = ['#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', '#F38181', '#AA96DA'];
+      for (let i = 0; i < 30; i++) {
+        const confetti = document.createElement('div');
+        confetti.className = 'confetti';
+        confetti.style.left = Math.random() * 100 + '%';
+        confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+        confetti.style.animationDuration = (2 + Math.random() * 2) + 's';
+        confetti.style.animationDelay = Math.random() * 0.5 + 's';
+        document.body.appendChild(confetti);
+        setTimeout(() => confetti.remove(), 4000);
+      }
+    }
+
+    // 事件绑定
+    spinBtn.addEventListener('click', spin);
+    document.getElementById('closeModal').addEventListener('click', () => {
+      prizeModal.classList.remove('show');
+    });
+    document.getElementById('shopBtn').addEventListener('click', () => {
+      initShop();
+      shopModal.classList.add('show');
+    });
+    document.getElementById('closeShop').addEventListener('click', () => {
+      shopModal.classList.remove('show');
+    });
+    document.getElementById('addChanceBtn').addEventListener('click', () => {
+      chances++;
+      updateDisplay();
+      alert('✅ 已增加1次抽奖机会！');
+    });
+
+    // 初始化
+    drawWheel();
+    updateDisplay();
+    initPrizeInfo();
+  </script>
+</body>
+</html>

@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>幸运九宫格 - 学习积分抽奖</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #fce7f3, #f3e8ff, #e0f2fe);
+      min-height: 100vh;
+    }
+    
+    .lottery-box {
+      width: 300px;
+      height: 300px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 6px;
+      padding: 10px;
+      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      border-radius: 20px;
+      box-shadow: 0 10px 40px rgba(251, 191, 36, 0.4);
+    }
+    
+    .cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #fffbeb, #fef3c7);
+      border-radius: 12px;
+      font-weight: bold;
+      transition: all 0.15s ease;
+      border: 3px solid #fcd34d;
+    }
+    
+    .cell.prize-cell { cursor: default; }
+    
+    .cell.start-cell {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      border: 3px solid #fff;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(239, 68, 68, 0.5);
+    }
+    
+    .cell.start-cell:hover:not(:disabled) {
+      transform: scale(1.05);
+    }
+    
+    .cell.start-cell:disabled {
+      background: linear-gradient(135deg, #9ca3af, #6b7280);
+      cursor: not-allowed;
+    }
+    
+    .cell.active {
+      transform: scale(1.1);
+      border-color: #ef4444;
+      box-shadow: 0 0 20px #ef4444, 0 0 40px #ef4444;
+      z-index: 10;
+      background: linear-gradient(135deg, #fef08a, #fde047);
+    }
+    
+    .cell.winner {
+      animation: pulse 0.5s ease-in-out infinite alternate;
+      border-color: #22c55e;
+      box-shadow: 0 0 20px #22c55e;
+    }
+    
+    @keyframes pulse {
+      from { transform: scale(1); }
+      to { transform: scale(1.08); }
+    }
+    
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    
+    .modal-overlay.show { display: flex; }
+    
+    .modal-box {
+      background: white;
+      border-radius: 24px;
+      padding: 24px;
+      text-align: center;
+      max-width: 320px;
+      width: 90%;
+      animation: popIn 0.3s ease-out;
+    }
+    
+    .modal-box.large {
+      max-width: 400px;
+      max-height: 85vh;
+      overflow-y: auto;
+    }
+    
+    @keyframes popIn {
+      from { transform: scale(0.8); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    
+    .confetti {
+      position: fixed;
+      width: 10px;
+      height: 10px;
+      top: -20px;
+      animation: fall 3s linear forwards;
+      z-index: 200;
+    }
+    
+    @keyframes fall {
+      to { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+    }
+    
+    .tier-section {
+      margin-bottom: 16px;
+      padding: 12px;
+      border-radius: 12px;
+    }
+    
+    .tier-bronze { background: linear-gradient(135deg, #fef3c7, #fde68a); border: 2px solid #f59e0b; }
+    .tier-silver { background: linear-gradient(135deg, #f3f4f6, #e5e7eb); border: 2px solid #9ca3af; }
+    .tier-gold { background: linear-gradient(135deg, #fef9c3, #fef08a); border: 2px solid #eab308; }
+    .tier-diamond { background: linear-gradient(135deg, #ede9fe, #ddd6fe); border: 2px solid #8b5cf6; }
+    
+    .shop-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      background: white;
+      border-radius: 10px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .shop-item:hover:not(.disabled) { transform: scale(1.02); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .shop-item.disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    .tab-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      background: #f3f4f6;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .tab-btn.active {
+      background: linear-gradient(135deg, #ec4899, #8b5cf6);
+      color: white;
+    }
+    
+    .tab-btn:first-child { border-radius: 12px 0 0 12px; }
+    .tab-btn:last-child { border-radius: 0 12px 12px 0; }
+    
+    .record-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: #f9fafb;
+      border-radius: 8px;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+    
+    input[type="text"], input[type="number"], select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    
+    input:focus, select:focus {
+      outline: none;
+      border-color: #8b5cf6;
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <!-- 顶部状态栏 -->
+  <header style="background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); padding: 12px 16px; position: sticky; top: 0; z-index: 50;">
+    <div style="display: flex; align-items: center; justify-content: space-between; max-width: 400px; margin: 0 auto;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 24px;">🎰</span>
+        <span style="font-size: 18px; font-weight: bold; background: linear-gradient(90deg, #ec4899, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">幸运九宫格</span>
+      </div>
+      <div style="display: flex; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 4px; background: #fef3c7; padding: 4px 12px; border-radius: 20px;">
+          <span>💰</span>
+          <span id="pointsDisplay" style="font-weight: bold; color: #b45309;">0</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 4px; background: #dcfce7; padding: 4px 12px; border-radius: 20px;">
+          <span>🎲</span>
+          <span id="chancesDisplay" style="font-weight: bold; color: #15803d;">0</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主内容区 -->
+  <main style="display: flex; flex-direction: column; align-items: center; padding: 24px 16px;">
+    
+    <div id="noChanceTip" style="display: none; background: #fef3c7; color: #92400e; padding: 8px 16px; border-radius: 20px; margin-bottom: 16px; font-size: 14px;">
+      😅 抽奖次数用完了，点击下方"增加机会"
+    </div>
+
+    <!-- 九宫格抽奖区 -->
+    <!-- 激励标题 -->
+    <div style="text-align: center; margin-bottom: 20px;">
+      <div style="font-size: 24px; font-weight: bold; background: linear-gradient(90deg, #ec4899, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px;">
+        🌟 嘟嘟加油啊！坚持有大奖哦！🌟
+      </div>
+      <div id="motivationText" style="font-size: 14px; color: #6b7280;"></div>
+    </div>
+    <div class="lottery-box" id="lotteryBox"></div>
+
+    <!-- 概率说明 -->
+    <div id="prizeInfo" style="margin-top: 20px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;"></div>
+
+    <!-- 底部操作按钮 -->
+    <div style="margin-top: 24px; display: flex; gap: 12px;">
+      <button onclick="openShop()" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white; font-weight: bold; padding: 12px 24px; border-radius: 25px; border: none; font-size: 16px; cursor: pointer; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);">
+        🎁 商城
+      </button>
+      <button onclick="openSettings()" style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; font-weight: bold; padding: 12px 24px; border-radius: 25px; border: none; font-size: 16px; cursor: pointer; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);">
+        ⚙️ 设置
+      </button>
+    </div>
+    
+    <button onclick="addChance()" style="margin-top: 12px; background: none; border: none; color: #6b7280; font-size: 14px; cursor: pointer;">
+      ➕ 增加抽奖机会
+    </button>
+  </main>
+
+  <!-- 中奖弹窗 -->
+  <div class="modal-overlay" id="winModal">
+    <div class="modal-box">
+      <div id="winEmoji" style="font-size: 64px; margin-bottom: 16px;">🎉</div>
+      <h2 style="font-size: 24px; font-weight: bold; color: #1f2937; margin-bottom: 8px;">🎊 恭喜中奖！🎊</h2>
+      <div id="winName" style="font-size: 20px; font-weight: bold; color: #8b5cf6; margin-bottom: 8px;">幸运大奖</div>
+      <div id="winPoints" style="font-size: 32px; font-weight: bold; color: #1f2937; margin-bottom: 16px;">+8 积分</div>
+      <button onclick="closeWinModal()" style="width: 100%; padding: 14px; background: linear-gradient(135deg, #ec4899, #8b5cf6); color: white; font-weight: bold; font-size: 16px; border: none; border-radius: 12px; cursor: pointer;">
+        太棒了！✨
+      </button>
+    </div>
+  </div>
+
+  <!-- 商城弹窗 -->
+  <div class="modal-overlay" id="shopModal">
+    <div class="modal-box large">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h2 style="font-size: 20px; font-weight: bold;">🎁 积分商城</h2>
+        <button onclick="closeShop()" style="background: none; border: none; font-size: 24px; color: #9ca3af; cursor: pointer;">×</button>
+      </div>
+      
+      <div style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 12px 16px; border-radius: 12px; margin-bottom: 16px;">
+        <div style="font-size: 12px; opacity: 0.9;">当前积分</div>
+        <div id="shopPointsDisplay" style="font-size: 28px; font-weight: bold;">0</div>
+      </div>
+      
+      <!-- 商城标签切换 -->
+      <div style="display: flex; margin-bottom: 12px;">
+        <button id="shopTabItems" class="tab-btn active" onclick="showShopTab('items')">🎁 商品</button>
+        <button id="shopTabRecords" class="tab-btn" onclick="showShopTab('records')">📋 兑换记录</button>
+      </div>
+      
+      <!-- 商品列表 -->
+      <div id="shopItemsContent"></div>
+      
+      <!-- 兑换记录 -->
+      <div id="shopRecordsContent" style="display: none;"></div>
+    </div>
+  </div>
+
+  <!-- 设置弹窗 -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal-box large">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h2 style="font-size: 20px; font-weight: bold;">⚙️ 设置</h2>
+        <button onclick="closeSettings()" style="background: none; border: none; font-size: 24px; color: #9ca3af; cursor: pointer;">×</button>
+      </div>
+      
+      <!-- 设置标签切换 -->
+      <div style="display: flex; margin-bottom: 12px;">
+        <button id="settingsTabPrize" class="tab-btn active" onclick="showSettingsTab('prize')">🎰 抽奖设置</button>
+        <button id="settingsTabShop" class="tab-btn" onclick="showSettingsTab('shop')">🎁 商城设置</button>
+      </div>
+      
+      <div id="settingsContent"></div>
+      
+      <button onclick="saveSettings()" style="width: 100%; padding: 14px; background: linear-gradient(135deg, #22c55e, #16a34a); color: white; font-weight: bold; font-size: 16px; border: none; border-radius: 12px; cursor: pointer; margin-top: 16px;">
+        💾 保存设置
+      </button>
+      
+      <button onclick="resetAllData()" style="width: 100%; padding: 14px; background: linear-gradient(135deg, #ef4444, #dc2626); color: white; font-weight: bold; font-size: 16px; border: none; border-radius: 12px; cursor: pointer; margin-top: 8px;">
+        🔄 重置积分和记录
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // ============ 数据配置 ============
+    const DEFAULT_PRIZES = [
+      { id: 'small', name: '小奖励', points: 2, prob: 40, color: '#f97316', emoji: '🎯' },
+      { id: 'medium', name: '中奖励', points: 4, prob: 30, color: '#22c55e', emoji: '🌟' },
+      { id: 'large', name: '大奖励', points: 6, prob: 20, color: '#8b5cf6', emoji: '🎉' },
+      { id: 'lucky', name: '幸运大奖', points: 8, prob: 10, color: '#ef4444', emoji: '💎' }
+    ];
+
+    // 商城奖励（完全按照Excel表格内容）
+    const DEFAULT_SHOP = [
+      // 🥉 青铜档
+      { name: '抽抽乐一次', points: 5, tier: '🥉' },
+      { name: '玩15分钟玩具', points: 8, tier: '🥉' },
+      { name: '指定父母一方帮自己收拾书房', points: 10, tier: '🥉' },
+      { name: '看20分钟动画片', points: 12, tier: '🥉' },
+      { name: '玩20分钟游戏/平板', points: 15, tier: '🥉' },
+      { name: '玩一局桌游（三国杀等）', points: 18, tier: '🥉' },
+      { name: '获得一本漫画书/故事书', points: 20, tier: '🥉' },
+      // 🥈 白银档
+      { name: '吃一次汉堡', points: 25, tier: '🥈' },
+      { name: '让父母两人收拾书房和游乐区', points: 30, tier: '🥈' },
+      { name: '玩40分钟游戏/平板', points: 35, tier: '🥈' },
+      { name: '选择一部电影周末在家看', points: 40, tier: '🥈' },
+      { name: '去一次儿童乐园（嗨享小镇）', points: 45, tier: '🥈' },
+      { name: '周末玩60分钟游戏（中间休息10分钟）', points: 50, tier: '🥈' },
+      // 🥇 黄金档
+      { name: '选择一次外出就餐餐厅', points: 55, tier: '🥇' },
+      { name: '获得一个中等玩具（50元以内）', points: 60, tier: '🥇' },
+      { name: '去1次游乐场/电玩城（70币）', points: 70, tier: '🥇' },
+      { name: '看一场川剧变脸表演', points: 75, tier: '🥇' },
+      { name: '买一个喜欢的蛋糕庆祝', points: 80, tier: '🥇' },
+      { name: '周末出游地点由孩子决定（近距离）', points: 85, tier: '🥇' },
+      { name: '去电影院看一场电影（电影票+爆米花）', points: 100, tier: '🥇' },
+      // 💎 钻石档
+      { name: '获得一个大玩具（100元以内）', points: 120, tier: '💎' },
+      { name: '去泡一次温泉（约150元）', points: 150, tier: '💎' },
+      { name: '成都周边一日游（约150元）', points: 200, tier: '💎' },
+      { name: '成都周边二日游，住一晚（约200元）', points: 300, tier: '💎' }
+    ];
+
+    const TIER_INFO = {
+      '🥉': { name: '青铜档', class: 'tier-bronze', color: '#b45309' },
+      '🥈': { name: '白银档', class: 'tier-silver', color: '#6b7280' },
+      '🥇': { name: '黄金档', class: 'tier-gold', color: '#ca8a04' },
+      '💎': { name: '钻石档', class: 'tier-diamond', color: '#7c3aed' }
+    };
+
+    // ============ 状态管理 ============
+    let points = parseInt(localStorage.getItem('points') || '0');
+    let chances = parseInt(localStorage.getItem('chances') || '0');
+    let prizes = JSON.parse(localStorage.getItem('prizes') || 'null') || JSON.parse(JSON.stringify(DEFAULT_PRIZES));
+    let shopItems = JSON.parse(localStorage.getItem('shopItems') || 'null') || JSON.parse(JSON.stringify(DEFAULT_SHOP));
+    let exchangeRecords = JSON.parse(localStorage.getItem('exchangeRecords') || '[]');
+    let isSpinning = false;
+    
+    let gridPrizes = [];
+    let editingPrizes = null;
+    let editingShop = null;
+
+    // ============ 初始化 ============
+    function init() {
+      showMotivation();
+      generateGridPrizes();
+      renderGrid();
+      updateDisplay();
+      renderPrizeInfo();
+    }
+
+    // 随机显示激励语句
+    function showMotivation() {
+      const motivations = [
+        '💪 每天进步一点点，积少成多！',
+        '🎯 认真学习的嘟嘟最棒啦！',
+        '⭐ 坚持就是胜利，加油嘟嘟！',
+        '🏆 嘟嘟今天也很努力呢！',
+        '🌈 学习就像打游戏，越努力越厉害！',
+        '🚀 嘟嘟冲冲冲！大奖励在等着你！',
+        '✨ 每一次努力都算数哦！',
+        '🎉 嘟嘟真棒，继续保持！'
+      ];
+      const text = motivations[Math.floor(Math.random() * motivations.length)];
+      document.getElementById('motivationText').textContent = text;
+    }
+
+    function generateGridPrizes() {
+      gridPrizes = [];
+      const total = prizes.reduce((s, p) => s + p.prob, 0);
+      
+      for (let i = 0; i < 8; i++) {
+        let rand = Math.random() * total;
+        let cum = 0;
+        let selected = prizes[0];
+        
+        for (let p of prizes) {
+          cum += p.prob;
+          if (rand < cum) { selected = p; break; }
+        }
+        gridPrizes.push(selected);
+      }
+    }
+
+    function renderGrid() {
+      const box = document.getElementById('lotteryBox');
+      const cellPositions = [0, 1, 2, 5, 8, 7, 6, 3];
+      
+      let html = '';
+      for (let i = 0; i < 9; i++) {
+        if (i === 4) {
+          html += `<button class="cell start-cell" id="startBtn" onclick="startSpin()">
+            <span style="font-size: 28px;">🎲</span>
+            <span style="font-size: 14px; font-weight: bold; color: white;">抽奖</span>
+          </button>`;
+        } else {
+          const prizeIdx = cellPositions.indexOf(i);
+          const prize = gridPrizes[prizeIdx];
+          html += `<div class="cell prize-cell" id="cell${prizeIdx}" style="border-color: ${prize.color};">
+            <span style="font-size: 28px;">${prize.emoji}</span>
+            <span style="font-size: 14px; color: ${prize.color};">${prize.points}分</span>
+          </div>`;
+        }
+      }
+      box.innerHTML = html;
+      updateStartBtn();
+    }
+
+    function updateDisplay() {
+      document.getElementById('pointsDisplay').textContent = points;
+      document.getElementById('chancesDisplay').textContent = chances;
+      
+      const shopPoints = document.getElementById('shopPointsDisplay');
+      if (shopPoints) shopPoints.textContent = points;
+      
+      document.getElementById('noChanceTip').style.display = chances <= 0 ? 'block' : 'none';
+      
+      localStorage.setItem('points', points);
+      localStorage.setItem('chances', chances);
+    }
+
+    function updateStartBtn() {
+      const btn = document.getElementById('startBtn');
+      if (btn) {
+        btn.disabled = chances <= 0 || isSpinning;
+        const textSpan = btn.querySelector('span:last-child');
+        if (textSpan) {
+          textSpan.textContent = chances <= 0 ? '无机会' : (isSpinning ? '抽奖中' : '抽奖');
+        }
+      }
+    }
+
+    function renderPrizeInfo() {
+      const container = document.getElementById('prizeInfo');
+      const total = prizes.reduce((s, p) => s + p.prob, 0);
+      
+      container.innerHTML = prizes.map(p => `
+        <div style="background: rgba(255,255,255,0.8); padding: 8px 12px; border-radius: 12px; text-align: center; min-width: 60px;">
+          <div style="font-size: 20px;">${p.emoji}</div>
+          <div style="font-size: 12px; font-weight: bold; color: ${p.color};">${p.points}分</div>
+          <div style="font-size: 11px; color: #6b7280;">${Math.round(p.prob/total*100)}%</div>
+        </div>
+      `).join('');
+    }
+
+    // ============ 抽奖逻辑 ============
+    function startSpin() {
+      if (isSpinning || chances <= 0) return;
+      
+      isSpinning = true;
+      updateStartBtn();
+      
+      const total = prizes.reduce((s, p) => s + p.prob, 0);
+      let rand = Math.random() * total;
+      let cum = 0;
+      let wonPrize = prizes[0];
+      
+      for (let p of prizes) {
+        cum += p.prob;
+        if (rand < cum) { wonPrize = p; break; }
+      }
+      
+      let targetCellIdx = -1;
+      for (let i = 0; i < gridPrizes.length; i++) {
+        if (gridPrizes[i].id === wonPrize.id) { targetCellIdx = i; break; }
+      }
+      
+      if (targetCellIdx === -1) {
+        targetCellIdx = Math.floor(Math.random() * 8);
+        gridPrizes[targetCellIdx] = wonPrize;
+        
+        const cellEl = document.getElementById('cell' + targetCellIdx);
+        if (cellEl) {
+          cellEl.style.borderColor = wonPrize.color;
+          cellEl.innerHTML = `<span style="font-size: 28px;">${wonPrize.emoji}</span><span style="font-size: 14px; color: ${wonPrize.color};">${wonPrize.points}分</span>`;
+        }
+      }
+      
+      const totalRounds = 3;
+      const totalSteps = totalRounds * 8 + targetCellIdx;
+      let currentStep = 0;
+      let currentCell = 0;
+      
+      function clearHighlight() {
+        for (let i = 0; i < 8; i++) {
+          const cell = document.getElementById('cell' + i);
+          if (cell) cell.classList.remove('active', 'winner');
+        }
+      }
+      
+      function animate() {
+        clearHighlight();
+        const cell = document.getElementById('cell' + currentCell);
+        if (cell) cell.classList.add('active');
+        
+        currentStep++;
+        currentCell = (currentCell + 1) % 8;
+        
+        if (currentStep < totalSteps) {
+          const progress = currentStep / totalSteps;
+          const delay = 50 + 250 * Math.pow(progress, 2);
+          setTimeout(animate, delay);
+        } else {
+          clearHighlight();
+          const winCell = document.getElementById('cell' + targetCellIdx);
+          if (winCell) winCell.classList.add('winner');
+          
+          setTimeout(() => {
+            isSpinning = false;
+            chances--;
+            points += wonPrize.points;
+            updateDisplay();
+            updateStartBtn();
+            showWinModal(wonPrize);
+          }, 500);
+        }
+      }
+      
+      animate();
+    }
+
+    // ============ 弹窗 ============
+    function showWinModal(prize) {
+      document.getElementById('winEmoji').textContent = prize.emoji;
+      document.getElementById('winName').textContent = prize.name;
+      document.getElementById('winPoints').textContent = '+' + prize.points + ' 积分';
+      document.getElementById('winModal').classList.add('show');
+      createConfetti();
+    }
+
+    function closeWinModal() {
+      document.getElementById('winModal').classList.remove('show');
+    }
+
+    function createConfetti() {
+      const colors = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899'];
+      for (let i = 0; i < 40; i++) {
+        const conf = document.createElement('div');
+        conf.className = 'confetti';
+        conf.style.left = Math.random() * 100 + '%';
+        conf.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+        conf.style.animationDelay = Math.random() * 0.5 + 's';
+        conf.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
+        document.body.appendChild(conf);
+        setTimeout(() => conf.remove(), 3500);
+      }
+    }
+
+    // ============ 商城 ============
+    function openShop() {
+      document.getElementById('shopPointsDisplay').textContent = points;
+      showShopTab('items');
+      document.getElementById('shopModal').classList.add('show');
+    }
+
+    function closeShop() {
+      document.getElementById('shopModal').classList.remove('show');
+    }
+
+    function showShopTab(tab) {
+      document.getElementById('shopTabItems').classList.toggle('active', tab === 'items');
+      document.getElementById('shopTabRecords').classList.toggle('active', tab === 'records');
+      document.getElementById('shopItemsContent').style.display = tab === 'items' ? 'block' : 'none';
+      document.getElementById('shopRecordsContent').style.display = tab === 'records' ? 'block' : 'none';
+      
+      if (tab === 'items') renderShopByTier();
+      if (tab === 'records') renderExchangeRecords();
+    }
+
+    function renderShopByTier() {
+      const container = document.getElementById('shopItemsContent');
+      const tiers = ['🥉', '🥈', '🥇', '💎'];
+      
+      let html = '';
+      tiers.forEach(tier => {
+        const items = shopItems.filter(item => item.tier === tier);
+        if (items.length === 0) return;
+        
+        const info = TIER_INFO[tier];
+        html += `
+          <div class="tier-section ${info.class}">
+            <div style="font-weight: bold; color: ${info.color}; margin-bottom: 8px; font-size: 14px;">
+              ${tier} ${info.name}
+            </div>
+            ${items.map(item => {
+              const canBuy = points >= item.points;
+              return `
+                <div class="shop-item ${canBuy ? '' : 'disabled'}" onclick="${canBuy ? `exchange('${item.name}', ${item.points}, '${item.tier}')` : ''}">
+                  <span style="font-size: 14px;">${item.name}</span>
+                  <span style="background: ${canBuy ? '#fef3c7' : '#e5e7eb'}; color: ${canBuy ? '#b45309' : '#6b7280'}; padding: 4px 10px; border-radius: 20px; font-weight: bold; font-size: 12px;">${item.points}分</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      });
+      
+      container.innerHTML = html;
+    }
+
+    function renderExchangeRecords() {
+      const container = document.getElementById('shopRecordsContent');
+      
+      if (exchangeRecords.length === 0) {
+        container.innerHTML = `<div style="text-align: center; color: #9ca3af; padding: 40px;">暂无兑换记录</div>`;
+        return;
+      }
+      
+      container.innerHTML = `
+        <div style="margin-bottom: 8px; font-size: 12px; color: #6b7280;">共 ${exchangeRecords.length} 条记录</div>
+        ${exchangeRecords.map(r => `
+          <div class="record-item">
+            <div>
+              <span style="color: ${TIER_INFO[r.tier]?.color || '#6b7280'};">${r.tier}</span>
+              <span style="font-weight: 500;">${r.name}</span>
+            </div>
+            <div style="text-align: right;">
+              <div style="color: #ef4444; font-weight: bold;">-${r.points}分</div>
+              <div style="font-size: 11px; color: #9ca3af;">${r.date}</div>
+            </div>
+          </div>
+        `).join('')}
+      `;
+    }
+
+    function exchange(name, cost, tier) {
+      if (points < cost) return;
+      
+      if (!confirm(`确定兑换「${name}」吗？\n消耗 ${cost} 积分`)) return;
+      
+      points -= cost;
+      
+      // 记录兑换
+      exchangeRecords.unshift({
+        name: name,
+        points: cost,
+        tier: tier,
+        date: new Date().toLocaleDateString('zh-CN')
+      });
+      localStorage.setItem('exchangeRecords', JSON.stringify(exchangeRecords));
+      
+      updateDisplay();
+      renderShopByTier();
+      
+      alert(`🎉 兑换成功！\n\n${name}\n\n找爸爸妈妈兑现奖励吧！`);
+    }
+
+    // ============ 设置 ============
+    function openSettings() {
+      editingPrizes = JSON.parse(JSON.stringify(prizes));
+      editingShop = JSON.parse(JSON.stringify(shopItems));
+      showSettingsTab('prize');
+      document.getElementById('settingsModal').classList.add('show');
+    }
+
+    function closeSettings() {
+      document.getElementById('settingsModal').classList.remove('show');
+    }
+
+    function showSettingsTab(tab) {
+      document.getElementById('settingsTabPrize').classList.toggle('active', tab === 'prize');
+      document.getElementById('settingsTabShop').classList.toggle('active', tab === 'shop');
+      
+      if (tab === 'prize') renderPrizeSettings();
+      if (tab === 'shop') renderShopSettings();
+    }
+
+    function renderPrizeSettings() {
+      const container = document.getElementById('settingsContent');
+      
+      const totalProb = editingPrizes.reduce((s, p) => s + p.prob, 0);
+      const probWarn = totalProb !== 100 ? `<div style="background: #fef2f2; color: #dc2626; padding: 8px; border-radius: 8px; margin-bottom: 12px; font-size: 13px;">⚠️ 概率总和 ${totalProb}%，需等于100%</div>` : '';
+      
+      container.innerHTML = `
+        ${probWarn}
+        <div style="font-weight: bold; margin-bottom: 8px;">🎰 奖品设置</div>
+        ${editingPrizes.map((p, i) => `
+          <div style="background: #f9fafb; padding: 12px; border-radius: 12px; margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-weight: bold;">${p.emoji} ${p.name}</span>
+              ${editingPrizes.length > 2 ? `<button onclick="removePrize(${i})" style="color: #ef4444; background: none; border: none; cursor: pointer;">🗑️</button>` : ''}
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div>
+                <label style="font-size: 11px; color: #6b7280;">名称</label>
+                <input type="text" value="${p.name}" onchange="updateEditPrize(${i}, 'name', this.value)">
+              </div>
+              <div>
+                <label style="font-size: 11px; color: #6b7280;">积分</label>
+                <input type="number" value="${p.points}" min="1" onchange="updateEditPrize(${i}, 'points', parseInt(this.value)||1)">
+              </div>
+              <div>
+                <label style="font-size: 11px; color: #6b7280;">概率(%)</label>
+                <input type="number" value="${p.prob}" min="1" max="100" onchange="updateEditPrize(${i}, 'prob', parseInt(this.value)||1)">
+              </div>
+              <div>
+                <label style="font-size: 11px; color: #6b7280;">图标</label>
+                <select onchange="updateEditPrize(${i}, 'emoji', this.value)">
+                  ${['🎯','🌟','🎉','💎','🎁','🏆','⭐','🔥','🍀','🌈','👑','💰','🎲'].map(e => `<option value="${e}" ${p.emoji===e?'selected':''}>${e}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+        <button onclick="addNewPrize()" style="width: 100%; padding: 8px; border: 2px dashed #d1d5db; border-radius: 8px; background: none; color: #6b7280; cursor: pointer;">➕ 添加奖品</button>
+        <button onclick="resetToDefaultPrizes()" style="width: 100%; padding: 8px; border: none; border-radius: 8px; background: none; color: #6b7280; cursor: pointer; margin-top: 8px; font-size: 13px;">🔄 恢复默认奖品</button>
+      `;
+    }
+
+    function renderShopSettings() {
+      const container = document.getElementById('settingsContent');
+      const tiers = ['🥉', '🥈', '🥇', '💎'];
+      
+      container.innerHTML = `
+        <div style="font-weight: bold; margin-bottom: 8px;">🎁 商城商品设置</div>
+        ${tiers.map(tier => {
+          const info = TIER_INFO[tier];
+          const items = editingShop.filter(item => item.tier === tier);
+          return `
+            <div style="background: #f9fafb; padding: 12px; border-radius: 12px; margin-bottom: 8px;">
+              <div style="font-weight: bold; color: ${info.color}; margin-bottom: 8px;">${tier} ${info.name}</div>
+              ${items.map((item, idx) => {
+                const globalIdx = editingShop.findIndex(i => i === item);
+                return `
+                  <div style="display: flex; gap: 6px; margin-bottom: 6px; align-items: center;">
+                    <input type="text" value="${item.name}" onchange="updateEditShop(${globalIdx}, 'name', this.value)" style="flex: 1;">
+                    <input type="number" value="${item.points}" min="1" onchange="updateEditShop(${globalIdx}, 'points', parseInt(this.value)||1)" style="width: 70px;">
+                    <button onclick="removeShopItem(${globalIdx})" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 18px;">✕</button>
+                  </div>
+                `;
+              }).join('')}
+              <button onclick="addShopItem('${tier}')" style="width: 100%; padding: 6px; border: 1px dashed #d1d5db; border-radius: 6px; background: none; color: #6b7280; cursor: pointer; font-size: 12px;">+ 添加${info.name}商品</button>
+            </div>
+          `;
+        }).join('')}
+        <button onclick="resetToDefaultShop()" style="width: 100%; padding: 8px; border: none; border-radius: 8px; background: none; color: #6b7280; cursor: pointer; font-size: 13px;">🔄 恢复默认商城</button>
+      `;
+    }
+
+    function updateEditPrize(idx, field, value) {
+      editingPrizes[idx][field] = value;
+      if (field === 'prob') renderPrizeSettings();
+    }
+
+    function updateEditShop(idx, field, value) {
+      editingShop[idx][field] = value;
+    }
+
+    function removePrize(idx) {
+      editingPrizes.splice(idx, 1);
+      renderPrizeSettings();
+    }
+
+    function addNewPrize() {
+      if (editingPrizes.length >= 8) { alert('最多8个奖品'); return; }
+      editingPrizes.push({ id: 'p' + Date.now(), name: '新奖品', points: 1, prob: 10, color: '#3b82f6', emoji: '🎁' });
+      renderPrizeSettings();
+    }
+
+    function resetToDefaultPrizes() {
+      editingPrizes = JSON.parse(JSON.stringify(DEFAULT_PRIZES));
+      renderPrizeSettings();
+    }
+
+    function addShopItem(tier) {
+      editingShop.push({ name: '新商品', points: 10, tier: tier });
+      renderShopSettings();
+    }
+
+    function removeShopItem(idx) {
+      editingShop.splice(idx, 1);
+      renderShopSettings();
+    }
+
+    function resetToDefaultShop() {
+      editingShop = JSON.parse(JSON.stringify(DEFAULT_SHOP));
+      renderShopSettings();
+    }
+
+    function saveSettings() {
+      const total = editingPrizes.reduce((s, p) => s + p.prob, 0);
+      if (total !== 100) {
+        alert('概率总和必须等于100%！当前为' + total + '%');
+        return;
+      }
+      
+      prizes = editingPrizes;
+      shopItems = editingShop;
+      localStorage.setItem('prizes', JSON.stringify(prizes));
+      localStorage.setItem('shopItems', JSON.stringify(shopItems));
+      
+      generateGridPrizes();
+      renderGrid();
+      renderPrizeInfo();
+      closeSettings();
+      alert('✅ 设置已保存！');
+    }
+
+    // ============ 其他功能 ============
+    function addChance() {
+      chances++;
+      updateDisplay();
+      updateStartBtn();
+      alert('✅ 已增加1次抽奖机会！');
+    }
+
+    // 重置所有数据
+    function resetAllData() {
+      if (!confirm('⚠️ 确定要重置所有数据吗？\n\n将清空：\n• 累计积分\n• 抽奖机会\n• 兑换记录\n\n此操作不可恢复！')) return;
+      
+      points = 0;
+      chances = 0;
+      exchangeRecords = [];
+      
+      localStorage.setItem('points', '0');
+      localStorage.setItem('chances', '0');
+      localStorage.setItem('exchangeRecords', '[]');
+      
+      updateDisplay();
+      updateStartBtn();
+      generateGridPrizes();
+      renderGrid();
+      closeSettings();
+      
+      alert('✅ 数据已重置！\n\n积分：0\n抽奖机会：0次');
+    }
+
+    // 启动
+    init();
+  </script>
+</body>
+</html>
